@@ -147,6 +147,15 @@
 .panel-filtros-envoltura { margin: 0; flex: 1; min-width: 0; }
 .panel-controles .btn { flex-shrink: 0; }
 
+/* En celular, "flex:1" apretaba los filtros a una tira angosta para dejarle
+   lugar al botón "Descargar álbum" en la misma fila — se veía apretado y
+   difícil de tocar. Se apilan: filtros arriba con todo el ancho, botón
+   abajo también a todo el ancho. */
+@media (max-width: 640px) {
+  .panel-controles { flex-direction: column; align-items: stretch; }
+  .panel-controles .btn { width: 100%; justify-content: center; }
+}
+
 /* ==========================================================================
    CONTENIDO — tarjetas tipo "impresión montada"
    ========================================================================== */
