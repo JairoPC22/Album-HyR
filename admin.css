@@ -76,7 +76,7 @@
 /* ==========================================================================
    PANEL — estructura general
    ========================================================================== */
-.panel { min-height: 100dvh; padding-bottom: var(--space-9); animation: panelEntrada 500ms var(--ease-out) both; }
+.panel { min-height: 100dvh; padding-bottom: var(--space-9); animation: panelEntrada 500ms var(--ease-out) both; overflow-x: hidden; }
 @keyframes panelEntrada { from { opacity: 0; } to { opacity: 1; } }
 
 .panel-header {
@@ -145,7 +145,7 @@
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4);
   padding: var(--space-8) var(--space-5) 0; max-width: 1200px; margin-inline: auto;
 }
-.panel-filtros-envoltura { margin: 0; flex: 1; min-width: 0; }
+.panel-filtros-envoltura { margin: 0; flex: 1; min-width: 0; max-width: 100%; }
 .panel-controles .btn { flex-shrink: 0; }
 
 /* En celular, "flex:1" apretaba los filtros a una tira angosta para dejarle

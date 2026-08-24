@@ -36,7 +36,10 @@ const CONFIG = {
 
   // URL de la aplicación web de Apps Script (ver apps-script/README_SETUP.md).
   API_URL: 'https://script.google.com/macros/s/AKfycbzD2xibvPVRqSj-UkI-bgs1RfmlstCirwMWXlx4VXIxlGXw9v-pE2OC-Wn5SxbyjMo22Q/exec',
-  API_TIMEOUT_MS: 15000,
+  // Apps Script puede tardar varios segundos en "despertar" tras estar
+  // inactivo (medido: ~9s solo el primer salto, sin contar la red del
+  // celular encima) — 15s se quedaba corto justo en ese primer intento.
+  API_TIMEOUT_MS: 25000,
   API_MAX_RETRIES: 2,
 
   // URL canónica del sitio publicado. Se deja vacía hasta que exista un dominio real.
