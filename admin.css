@@ -102,6 +102,7 @@
   background: var(--color-blanco-calido); border-radius: var(--radius-md); padding: var(--space-5) var(--space-4);
   text-align: center; box-shadow: var(--shadow-sm); border-top: 3px solid var(--color-taupe);
   animation: tarjetaResumenEntrada 500ms var(--ease-out) both;
+  min-width: 0; /* si no, una celda de grid puede negarse a encogerse por debajo del contenido y forzar scroll horizontal */
 }
 .resumen-tarjeta--pendiente { border-top-color: var(--color-dorado); }
 .resumen-tarjeta--publicada { border-top-color: var(--color-exito); }
@@ -225,7 +226,7 @@
 .admin-card__confirmar .btn { flex: none; width: 100%; }
 
 .admin-card--skeleton {
-  aspect-ratio: 4/6.2; opacity: 1; transform: none; animation: none;
+  aspect-ratio: 4/6.2; opacity: 1; transform: none;
   background: linear-gradient(100deg, var(--color-blanco-calido) 20%, var(--color-marfil) 40%, var(--color-blanco-calido) 60%);
   background-size: 200% 100%; animation: shimmer 1.6s ease-in-out infinite;
 }

@@ -82,36 +82,52 @@ const AdminModule = (() => {
 
   /* ==========================================================================
      CLIENTE API — mismas convenciones que script.js (fetch con timeout,
-     text/plain para evitar preflight CORS, errores con código estable)
+     text/plain para evitar preflight CORS, errores con código estable).
+     También reintenta automáticamente (con espera creciente) los errores
+     transitorios — antes solo script.js (el sitio de invitados) lo hacía;
+     el panel se quedaba corto y mostraba "Reintentar" desde el primer
+     tropiezo, algo muy notorio justo al abrirlo (la primera carga después de
+     un rato sin uso puede tardar por el arranque en frío de Apps Script).
      ========================================================================== */
-  async function peticion(url, opciones, timeoutMs) {
-    const controlador = new AbortController();
-    const timeoutId = setTimeout(() => controlador.abort(), timeoutMs || CONFIG.API_TIMEOUT_MS);
-    try {
-      const respuesta = await fetch(url, { ...opciones, signal: controlador.signal });
-      clearTimeout(timeoutId);
-      let cuerpo;
-      try { cuerpo = await respuesta.json(); }
-      catch { throw Object.assign(new Error('Respuesta inválida del servidor.'), { codigo: 'RESPUESTA_INVALIDA' }); }
-      if (!respuesta.ok || cuerpo.ok === false) {
-        const codigo = (cuerpo.error && cuerpo.error.code) || 'ERROR_DESCONOCIDO';
-        const mensaje = (cuerpo.error && cuerpo.error.message) || 'Ocurrió un problema.';
-        throw Object.assign(new Error(mensaje), { codigo });
+  const ERRORES_RECUPERABLES = new Set(['TIMEOUT', 'RED', 'SERVIDOR_OCUPADO', 'RESPUESTA_INVALIDA']);
+
+  function esperar(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+  async function peticion(url, opciones, { timeoutMs, reintentable = true } = {}) {
+    let intento = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const controlador = new AbortController();
+      const timeoutId = setTimeout(() => controlador.abort(), timeoutMs || CONFIG.API_TIMEOUT_MS);
+      try {
+        const respuesta = await fetch(url, { ...opciones, signal: controlador.signal });
+        clearTimeout(timeoutId);
+        let cuerpo;
+        try { cuerpo = await respuesta.json(); }
+        catch { throw Object.assign(new Error('Respuesta inválida del servidor.'), { codigo: 'RESPUESTA_INVALIDA' }); }
+        if (!respuesta.ok || cuerpo.ok === false) {
+          const codigo = (cuerpo.error && cuerpo.error.code) || 'ERROR_DESCONOCIDO';
+          const mensaje = (cuerpo.error && cuerpo.error.message) || 'Ocurrió un problema.';
+          throw Object.assign(new Error(mensaje), { codigo });
+        }
+        return cuerpo.data;
+      } catch (err) {
+        clearTimeout(timeoutId);
+        const codigo = err.name === 'AbortError' ? 'TIMEOUT' : (err.codigo || 'RED');
+        intento += 1;
+        const puedeReintentar = reintentable && ERRORES_RECUPERABLES.has(codigo) && intento <= CONFIG.API_MAX_RETRIES;
+        if (!puedeReintentar) throw Object.assign(new Error(err.message || 'La solicitud tardó demasiado.'), { codigo });
+        await esperar(Math.min(4000, 400 * 2 ** intento) + Math.random() * 200);
       }
-      return cuerpo.data;
-    } catch (err) {
-      clearTimeout(timeoutId);
-      if (err.name === 'AbortError') throw Object.assign(new Error('La solicitud tardó demasiado.'), { codigo: 'TIMEOUT' });
-      throw err;
     }
   }
 
-  function post(action, payload, timeoutMs) {
+  function post(action, payload, timeoutMs, reintentable) {
     return peticion(CONFIG.API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action, ...payload }),
-    }, timeoutMs);
+    }, { timeoutMs, reintentable });
   }
 
   function get(parametros) {
@@ -365,7 +381,10 @@ const AdminModule = (() => {
   }
 
   function mensajeErrorCarga(err) {
-    if (err && err.codigo === 'TIMEOUT') return 'El álbum tardó demasiado en responder. Verifica tu conexión.';
+    const codigo = err && err.codigo;
+    if (codigo === 'TIMEOUT') return 'El álbum tardó demasiado en responder. Verifica tu conexión.';
+    if (codigo === 'RED') return 'No pudimos conectarnos con el álbum en línea. Revisa tu conexión a internet.';
+    if (codigo === 'SERVIDOR_OCUPADO') return 'El álbum está recibiendo muchas visitas en este momento. Intenta de nuevo en un momento.';
     return 'No se pudo cargar la información del álbum. Verifica que el backend esté desplegado (ver apps-script/README_SETUP.md).';
   }
 
@@ -611,7 +630,11 @@ const AdminModule = (() => {
     el.botonGenerarDescarga.disabled = true;
     mostrarEstadoDescarga('cargando', ' Generando el PDF del álbum… puede tardar según cuántas fotografías haya.');
     try {
-      const datos = await post('adminGenerarDescarga', { token, filtro }, DESCARGA_TIMEOUT_MS);
+      // reintentable:false — generar el PDF puede tardar varios minutos; si
+      // el primer intento se agota, reintentarlo solo dispararía OTRA
+      // generación larga en vez de resolver algo, y podría confundir al
+      // duplicar el trabajo. Mejor que el botón "Reintentar" quede a mano.
+      const datos = await post('adminGenerarDescarga', { token, filtro }, DESCARGA_TIMEOUT_MS, false);
       const faltantes = datos.solicitadas - datos.cantidad;
       const mensaje = faltantes > 0
         ? `Listo: ${datos.cantidad} de ${datos.solicitadas} fotografías incluidas (${faltantes} no se pudieron leer desde Drive). La descarga comenzó sola.`
