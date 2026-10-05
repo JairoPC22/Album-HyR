@@ -535,7 +535,12 @@ const GalleryModule = (() => {
         $$('.filtro-pill', elementos.filtros).forEach((b) => b.setAttribute('aria-pressed', String(b === boton && activar)));
         $('use', boton).setAttribute('href', activar ? '#icon-heart-filled' : '#icon-heart');
         moverIndicador(activar ? boton : $(`.filtro-pill[data-categoria="${state.categoriaActual}"]`, elementos.filtros));
-        if (activar) mostrarFavoritas(); else cargar({ reiniciar: true });
+        if (activar) {
+          mostrarFavoritas();
+        } else {
+          state.cursor = ''; // sin esto, "cargar" seguía paginando desde donde se quedó antes de entrar a favoritas
+          cargar({ reiniciar: true });
+        }
         return;
       }
 
@@ -640,7 +645,12 @@ const GalleryModule = (() => {
     }
 
     boton.addEventListener('click', () => {
-      LightboxModule.open(state.fotos, state.fotos.findIndex((f) => f.id === foto.id));
+      // En "Mis favoritas" la lista visible NO es state.fotos (la de la categoría
+      // cargada): usarla abría la foto equivocada o ninguna (índice -1).
+      const visibles = state.modoFavoritas
+        ? FavoritesModule.listar().map((id) => PhotoStore.obtener(id)).filter(Boolean)
+        : state.fotos;
+      LightboxModule.open(visibles, visibles.findIndex((f) => f.id === foto.id));
     });
 
     nodo.dataset.id = foto.id;
@@ -1352,6 +1362,8 @@ const UploadQueueModule = (() => {
   function reintentarItem(idempotencyKey) {
     const item = items.get(idempotencyKey);
     if (!item) return;
+    const validacion = validarArchivo(item.file);
+    if (!validacion.valido) { actualizarEstadoVisual(item, validacion.motivo); return; } // un archivo inválido nunca se arregla reintentando
     item.intentos = 0;
     item.estado = 'pendiente';
     actualizarEstadoVisual(item, 'En espera');
@@ -1465,8 +1477,9 @@ const UploadQueueModule = (() => {
 const GraciasFlourishModule = (() => {
   function init() {
     const seccion = $('#gracias');
+    if (!seccion) return;
     const monograma = $('.monogram--gracias', seccion);
-    if (!seccion || !monograma) return;
+    if (!monograma) return;
     let disparado = false;
     const observer = new IntersectionObserver((entradas) => {
       entradas.forEach((entrada) => {

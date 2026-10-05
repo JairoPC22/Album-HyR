@@ -178,6 +178,7 @@ const AdminModule = (() => {
   function mensajeErrorLogin(err) {
     const codigo = err && err.codigo;
     if (codigo === 'CREDENCIALES_INVALIDAS') return 'Contraseña incorrecta. Inténtalo de nuevo.';
+    if (codigo === 'DEMASIADOS_INTENTOS') return 'Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.';
     if (codigo === 'ADMIN_NO_CONFIGURADO') return 'El panel todavía no tiene una contraseña configurada. Revisa apps-script/README_SETUP.md.';
     if (codigo === 'TIMEOUT' || codigo === 'RESPUESTA_INVALIDA') return 'No se pudo conectar con el álbum en línea. Verifica que el backend esté desplegado.';
     return 'No se pudo iniciar sesión. Intenta de nuevo.';
@@ -355,8 +356,12 @@ const AdminModule = (() => {
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
   }
 
+  let numeroSolicitudFotos = 0;
+
   async function cargarFotos() {
     const el = elementos();
+    // Si se cambia de filtro rápido, la respuesta lenta de uno anterior no debe pisar la del actual.
+    const miSolicitud = ++numeroSolicitudFotos;
     el.error.hidden = true;
     el.vacio.hidden = true;
     el.grid.textContent = '';
@@ -364,6 +369,7 @@ const AdminModule = (() => {
 
     try {
       const datos = await get({ action: 'adminListAll', token, status: filtroActual });
+      if (miSolicitud !== numeroSolicitudFotos) return;
       $$('.es-temporal', el.grid).forEach((n) => n.remove());
       actualizarResumen(datos.resumen);
       fotosActuales = datos.items;
@@ -372,6 +378,7 @@ const AdminModule = (() => {
       datos.items.forEach((foto, i) => el.grid.appendChild(crearTarjeta(foto, i)));
       announce(`${datos.items.length} fotografías cargadas.`);
     } catch (err) {
+      if (miSolicitud !== numeroSolicitudFotos) return;
       $$('.es-temporal', el.grid).forEach((n) => n.remove());
       if (err.codigo === 'SESION_INVALIDA') { cerrarSesion('Tu sesión expiró. Vuelve a iniciar sesión.'); return; }
       el.error.hidden = false;
@@ -664,7 +671,7 @@ const AdminModule = (() => {
       el.campoPassword.focus();
     });
 
-    el.botonSalir.addEventListener('click', cerrarSesion);
+    el.botonSalir.addEventListener('click', () => cerrarSesion()); // sin argumentos: el evento de clic se mostraba como mensaje ("[object PointerEvent]")
     el.botonActualizar.addEventListener('click', cargarFotos);
     el.reintentar.addEventListener('click', cargarFotos);
 

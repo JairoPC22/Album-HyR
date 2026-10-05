@@ -37,6 +37,8 @@ const CACHE_TTL_SEGUNDOS = 60;
 const CLAVE_CACHE_PUBLICADAS = 'publicadas_todas_v1';
 const LOCK_TIMEOUT_MS = 10000;
 const ADMIN_SESSION_TTL_SEGUNDOS = 6 * 60 * 60; // 6 horas: máximo permitido por CacheService
+const ADMIN_MAX_INTENTOS = 8;                  // intentos fallidos de login antes de bloquear
+const ADMIN_VENTANA_INTENTOS_SEGUNDOS = 10 * 60; // el contador (y el bloqueo) se reinician tras 10 min
 
 /* ==========================================================================
  * PUNTOS DE ENTRADA
@@ -306,10 +308,18 @@ function adminLogin_(cuerpo) {
   if (!hashGuardado) {
     throw new ErrorControlado_('ADMIN_NO_CONFIGURADO', 'El panel todavía no tiene una contraseña configurada. Ejecuta configurarPasswordAdmin() en el editor de Apps Script.');
   }
+  const cache = CacheService.getScriptCache();
+  const fallidos = parseInt(cache.get('admin_login_fallidos') || '0', 10);
+  if (fallidos >= ADMIN_MAX_INTENTOS) {
+    throw new ErrorControlado_('DEMASIADOS_INTENTOS', 'Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.');
+  }
   const intento = String(cuerpo.password || '');
   if (!intento || calcularHashSHA256_(intento) !== hashGuardado) {
+    cache.put('admin_login_fallidos', String(fallidos + 1), ADMIN_VENTANA_INTENTOS_SEGUNDOS);
+    Utilities.sleep(1000); // frena la fuerza bruta: cada intento fallido cuesta 1 s
     throw new ErrorControlado_('CREDENCIALES_INVALIDAS', 'Contraseña incorrecta.');
   }
+  cache.remove('admin_login_fallidos');
   const token = Utilities.getUuid();
   CacheService.getScriptCache().put(`admin_sesion_${token}`, 'valida', ADMIN_SESSION_TTL_SEGUNDOS);
   return { token, expiraEnSegundos: ADMIN_SESSION_TTL_SEGUNDOS };
@@ -1565,7 +1575,10 @@ function calcularHashSHA256_(texto) {
 function sanitizarTexto_(valor, longitudMaxima) {
   if (!valor) return '';
   const sinEtiquetas = String(valor).replace(/<[^>]*>/g, '');
-  return sinEtiquetas.trim().slice(0, longitudMaxima);
+  // Un texto que empiece con = + - @ se interpretaría como FÓRMULA al guardarse
+  // en Google Sheets (inyección de fórmulas: podría leer o enviar datos de la hoja).
+  const sinFormula = sinEtiquetas.trim().replace(/^[=+\-@\s]+/, '');
+  return sinFormula.slice(0, longitudMaxima);
 }
 
 /**

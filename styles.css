@@ -669,12 +669,22 @@ h1, h2, h3 { font-family: var(--font-serif); font-weight: 500; color: var(--colo
 /* ==========================================================================
    GRACIAS
    ========================================================================== */
-.gracias { position: relative; padding: var(--space-9) var(--space-4); text-align: center; overflow: hidden; }
+.gracias { position: relative; isolation: isolate; padding: var(--space-9) var(--space-4); text-align: center; overflow: hidden; display: flex; align-items: center; min-height: clamp(460px, 38vw, 620px); }
 .gracias__bg { position: absolute; inset: 0; z-index: -1; }
-.gracias__bg img { width: 100%; height: 100%; object-fit: cover; animation: heroKenBurns 26s ease-in-out infinite alternate; transform-origin: center; }
+/* La foto de cierre es horizontal (3:2) y la sección es mucho más ancha que alta:
+   con object-position centrado el recorte cortaba las caras. Se ancla arriba-izquierda
+   (la pareja está en ~30-52% del ancho y ~10-30% del alto de la foto). */
+.gracias__bg img { width: 100%; height: 100%; object-fit: cover; object-position: 40% 8%; animation: heroKenBurns 26s ease-in-out infinite alternate; transform-origin: 40% 15%; }
 .gracias__scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(46,42,38,0.72), rgba(46,42,38,0.82)); }
-.gracias__contenido { position: relative; max-width: 620px; margin-inline: auto; color: var(--color-blanco-calido); }
+.gracias__contenido { position: relative; width: 100%; max-width: 620px; margin-inline: auto; color: var(--color-blanco-calido); }
 .gracias .section-title { color: var(--color-blanco-calido); }
+/* En pantallas anchas el texto se mueve a la derecha para no tapar a la pareja,
+   y el degradado oscurece solo ese lado en vez de toda la foto. */
+@media (min-width: 1000px) {
+  .gracias { padding-inline: 6%; }
+  .gracias__scrim { background: linear-gradient(90deg, rgba(46,42,38,0.08) 0%, rgba(46,42,38,0.2) 42%, rgba(46,42,38,0.8) 68%, rgba(46,42,38,0.88) 100%); }
+  .gracias__contenido { width: min(520px, 42%); max-width: none; margin-inline: auto 0; }
+}
 .gracias__texto { margin: var(--space-5) auto var(--space-6); font-size: var(--fs-lead); color: rgba(255,255,255,0.9); }
 
 /* ==========================================================================
