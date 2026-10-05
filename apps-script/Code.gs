@@ -342,7 +342,8 @@ function verificarSesionAdmin_(token) {
 function adminListarTodas_(parametros) {
   verificarSesionAdmin_(parametros.token);
   const filtroEstado = String(parametros.status || 'todas');
-  const filas = obtenerFilasConIndice_()
+  const todasLasFilas = obtenerFilasConIndice_(); // UNA sola lectura de la hoja (antes eran dos)
+  const filas = todasLasFilas
     .filter((fila) => filtroEstado === 'todas' || fila.status === filtroEstado)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -360,12 +361,13 @@ function adminListarTodas_(parametros) {
       createdAt: fila.createdAt,
       status: fila.status,
     })),
-    resumen: calcularResumenEstados_(),
+    resumen: calcularResumenEstados_(todasLasFilas),
+    moderationEnabled: obtenerPropiedad_('MODERATION_ENABLED', 'false') === 'true',
   };
 }
 
-function calcularResumenEstados_() {
-  const filas = obtenerFilasConIndice_();
+function calcularResumenEstados_(filasYaLeidas) {
+  const filas = filasYaLeidas || obtenerFilasConIndice_();
   return {
     total: filas.length,
     publicada: filas.filter((f) => f.status === 'publicada').length,
@@ -386,12 +388,14 @@ function adminModerar_(cuerpo) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_TIMEOUT_MS)) throw new ErrorControlado_('SERVIDOR_OCUPADO', 'Intenta de nuevo en un momento.');
   try {
-    const fila = obtenerFilasConIndice_().find((f) => f.id === id);
+    const filas = obtenerFilasConIndice_();
+    const fila = filas.find((f) => f.id === id);
     if (!fila) throw new ErrorControlado_('NO_ENCONTRADO', 'Esa fotografía ya no existe.');
     const columnaEstado = ENCABEZADOS.indexOf('status') + 1;
     obtenerOCrearHoja_().getRange(fila._fila, columnaEstado).setValue(nuevoEstado);
+    fila.status = nuevoEstado; // el resumen se calcula con las filas ya leídas, sin volver a leer la hoja
     invalidarCachePublicadas_();
-    return { id, status: nuevoEstado, resumen: calcularResumenEstados_() };
+    return { id, status: nuevoEstado, resumen: calcularResumenEstados_(filas) };
   } finally {
     lock.releaseLock();
   }
@@ -405,12 +409,13 @@ function adminEliminar_(cuerpo) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_TIMEOUT_MS)) throw new ErrorControlado_('SERVIDOR_OCUPADO', 'Intenta de nuevo en un momento.');
   try {
-    const fila = obtenerFilasConIndice_().find((f) => f.id === id);
+    const filas = obtenerFilasConIndice_();
+    const fila = filas.find((f) => f.id === id);
     if (!fila) throw new ErrorControlado_('NO_ENCONTRADO', 'Esa fotografía ya no existe.');
     borrarArchivoSilenciosamente_(fila.driveFileId);
     obtenerOCrearHoja_().deleteRow(fila._fila);
     invalidarCachePublicadas_();
-    return { id, eliminado: true, resumen: calcularResumenEstados_() };
+    return { id, eliminado: true, resumen: calcularResumenEstados_(filas.filter((f) => f.id !== id)) };
   } finally {
     lock.releaseLock();
   }
@@ -1432,7 +1437,11 @@ function obtenerOCrearCarpeta_() {
   return carpeta;
 }
 
+// Abrir el libro (SpreadsheetApp.openById) cuesta cientos de ms; en una misma
+// ejecución se abre UNA vez y se reutiliza (antes se abría 2-4 veces por solicitud).
+var hojaMemo_ = null;
 function obtenerOCrearHoja_() {
+  if (hojaMemo_) return hojaMemo_;
   const props = PropertiesService.getScriptProperties();
   const idGuardado = props.getProperty('SHEET_ID');
   let libro;
@@ -1458,6 +1467,7 @@ function obtenerOCrearHoja_() {
     hoja.appendRow(ENCABEZADOS);
     hoja.setFrozenRows(1);
   }
+  hojaMemo_ = hoja;
   return hoja;
 }
 

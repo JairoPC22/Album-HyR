@@ -24,6 +24,8 @@ const AdminModule = (() => {
   let filtroActual = 'todas';
   let elementosCache = null;
   let fotosActuales = [];
+  let todas = [];            // TODAS las fotos (se carga una vez; los filtros se aplican aquí)
+  let configAplicada = false;
   let indiceVisor = 0;
 
   const $ = (sel, ctx) => (ctx || document).querySelector(sel);
@@ -166,7 +168,12 @@ const AdminModule = (() => {
 
   async function intentarSesionGuardada() {
     const guardado = leerTokenGuardado();
-    if (!guardado) { mostrarLogin(); return; }
+    if (!guardado) {
+      mostrarLogin();
+      // Apps Script tarda varios segundos en "despertar": se le avisa ya, mientras se escribe la contraseña.
+      peticion(`${CONFIG.API_URL}?action=health`, { method: 'GET' }, { reintentable: false }).catch(() => {});
+      return;
+    }
     token = guardado;
     const sesionSigueValida = await cargarTodo();
     // Si la sesión expiró, cargarFotos()/cargarConfiguracion() ya llamaron a
@@ -258,7 +265,7 @@ const AdminModule = (() => {
       $$('.filtro-pill', el.filtros).forEach((b) => b.setAttribute('aria-pressed', String(b === boton)));
       moverIndicador(boton);
       filtroActual = boton.dataset.estado;
-      cargarFotos();
+      renderGrid(); // el filtro se aplica en el navegador: instantáneo, sin pedir nada al servidor
     });
 
     window.addEventListener('resize', debounce(() => moverIndicador($('.filtro-pill[aria-pressed="true"]', el.filtros)), 150));
@@ -284,10 +291,13 @@ const AdminModule = (() => {
      ========================================================================== */
   async function cargarTodo() {
     renderFiltros();
-    await Promise.all([cargarFotos(), cargarConfiguracion()]);
+    configAplicada = false;
+    await cargarFotos();
+    // Con el backend nuevo la configuración ya viene en la misma respuesta; la
+    // segunda petición solo se hace si el backend desplegado todavía es el viejo.
+    if (token !== null && !configAplicada) await cargarConfiguracion();
     // cargarFotos()/cargarConfiguracion() nunca lanzan: si la sesión expiró,
-    // ya llamaron a cerrarSesion() internamente y token queda en null. Se usa
-    // eso como señal para que quien llamó sepa si de verdad puede mostrar el panel.
+    // ya llamaron a cerrarSesion() internamente y token queda en null.
     return token !== null;
   }
 
@@ -320,12 +330,47 @@ const AdminModule = (() => {
     }
   }
 
+  /** Cuenta desde el valor anterior hasta el nuevo (salvo con movimiento reducido). */
+  function animarNumero(nodo, destino) {
+    const final = Number(destino) || 0;
+    const inicio = parseInt(nodo.textContent, 10);
+    const reducido = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reducido || Number.isNaN(inicio) || inicio === final) { nodo.textContent = final; return; }
+    const t0 = performance.now();
+    const dur = 700;
+    nodo.animId = (nodo.animId || 0) + 1; // una animación nueva cancela la anterior del mismo número
+    const miId = nodo.animId;
+    (function paso(ahora) {
+      if (nodo.animId !== miId) return;
+      const p = Math.min(1, (ahora - t0) / dur);
+      nodo.textContent = Math.round(inicio + (final - inicio) * (1 - (1 - p) ** 3));
+      if (p < 1) requestAnimationFrame(paso);
+    }(t0));
+  }
+
   function actualizarResumen(resumen) {
     const el = elementos();
-    el.resumenTotal.textContent = resumen.total;
-    el.resumenPendiente.textContent = resumen.pendiente;
-    el.resumenPublicada.textContent = resumen.publicada;
-    el.resumenOculta.textContent = resumen.oculta;
+    animarNumero(el.resumenTotal, resumen.total);
+    animarNumero(el.resumenPendiente, resumen.pendiente);
+    animarNumero(el.resumenPublicada, resumen.publicada);
+    animarNumero(el.resumenOculta, resumen.oculta);
+  }
+
+  /** Aviso visible y breve (además del anuncio para lectores de pantalla). */
+  let toastActual = null;
+  function mostrarToast(mensaje, tipo) {
+    if (toastActual) toastActual.remove();
+    const toast = document.createElement('div');
+    toast.className = 'admin-toast';
+    toast.dataset.tipo = tipo || 'ok';
+    toast.setAttribute('aria-hidden', 'true');
+    toast.textContent = mensaje;
+    document.body.appendChild(toast);
+    toastActual = toast;
+    setTimeout(() => {
+      toast.classList.add('is-saliendo');
+      setTimeout(() => { toast.remove(); if (toastActual === toast) toastActual = null; }, 340);
+    }, 2800);
   }
 
   function renderSkeletons(cantidad) {
@@ -357,33 +402,86 @@ const AdminModule = (() => {
   }
 
   let numeroSolicitudFotos = 0;
+  const LOTE = 24;               // tarjetas que se dibujan por tanda (con cientos de fotos, dibujar todas de golpe congela el panel)
+  let pendientesRender = [];
+  let observadorLote = null;
+
+  function calcularResumenLocal() {
+    const r = { total: todas.length, publicada: 0, pendiente: 0, oculta: 0 };
+    todas.forEach((f) => { if (r[f.status] !== undefined) r[f.status] += 1; });
+    return r;
+  }
+
+  function renderGrid() {
+    const el = elementos();
+    el.error.hidden = true;
+    el.grid.textContent = '';
+    fotosActuales = filtroActual === 'todas' ? todas.slice() : todas.filter((f) => f.status === filtroActual);
+    el.vacio.hidden = fotosActuales.length > 0;
+    pendientesRender = fotosActuales.slice();
+    renderSiguienteLote();
+  }
+
+  function renderSiguienteLote() {
+    const el = elementos();
+    const lote = pendientesRender.splice(0, LOTE);
+    const fragmento = document.createDocumentFragment();
+    lote.forEach((foto, i) => fragmento.appendChild(crearTarjeta(foto, i)));
+    el.grid.appendChild(fragmento);
+    prepararCentinelaLote();
+  }
+
+  function prepararCentinelaLote() {
+    if (observadorLote) { observadorLote.disconnect(); observadorLote = null; }
+    const anterior = $('#admin-centinela');
+    if (anterior) anterior.remove();
+    if (!pendientesRender.length) return;
+    const centinela = document.createElement('div');
+    centinela.id = 'admin-centinela';
+    centinela.setAttribute('aria-hidden', 'true');
+    centinela.style.height = '1px';
+    elementos().grid.after(centinela);
+    observadorLote = new IntersectionObserver((entradas) => {
+      if (entradas.some((e) => e.isIntersecting)) renderSiguienteLote();
+    }, { rootMargin: '700px 0px' });
+    observadorLote.observe(centinela);
+  }
 
   async function cargarFotos() {
     const el = elementos();
-    // Si se cambia de filtro rápido, la respuesta lenta de uno anterior no debe pisar la del actual.
+    // Si se pide otra carga antes de que termine la anterior, solo vale la última.
     const miSolicitud = ++numeroSolicitudFotos;
     el.error.hidden = true;
-    el.vacio.hidden = true;
-    el.grid.textContent = '';
-    renderSkeletons(6);
+    const primeraCarga = todas.length === 0;
+    if (primeraCarga) { el.vacio.hidden = true; el.grid.textContent = ''; renderSkeletons(6); }
+    el.botonActualizar.disabled = true;
 
     try {
-      const datos = await get({ action: 'adminListAll', token, status: filtroActual });
+      const datos = await get({ action: 'adminListAll', token, status: 'todas' });
       if (miSolicitud !== numeroSolicitudFotos) return;
-      $$('.es-temporal', el.grid).forEach((n) => n.remove());
-      actualizarResumen(datos.resumen);
-      fotosActuales = datos.items;
-
-      if (!datos.items.length) { el.vacio.hidden = false; return; }
-      datos.items.forEach((foto, i) => el.grid.appendChild(crearTarjeta(foto, i)));
-      announce(`${datos.items.length} fotografías cargadas.`);
+      todas = datos.items;
+      actualizarResumen(calcularResumenLocal());
+      if (typeof datos.moderationEnabled === 'boolean') {
+        el.switchModeracion.checked = datos.moderationEnabled;
+        el.switchModeracion.disabled = false;
+        configAplicada = true;
+      }
+      renderGrid();
+      announce(`${todas.length} fotografías cargadas.`);
     } catch (err) {
       if (miSolicitud !== numeroSolicitudFotos) return;
       $$('.es-temporal', el.grid).forEach((n) => n.remove());
       if (err.codigo === 'SESION_INVALIDA') { cerrarSesion('Tu sesión expiró. Vuelve a iniciar sesión.'); return; }
+      if (!primeraCarga) {
+        // Una actualización fallida NO borra lo que ya se ve: solo avisa.
+        mostrarToast('No se pudo actualizar. Se muestra lo último cargado.', 'error');
+        return;
+      }
       el.error.hidden = false;
       el.errorMensaje.textContent = mensajeErrorCarga(err);
       announce('No se pudo cargar el álbum.', true);
+    } finally {
+      if (miSolicitud === numeroSolicitudFotos) el.botonActualizar.disabled = false;
     }
   }
 
@@ -401,6 +499,7 @@ const AdminModule = (() => {
     nodo.dataset.status = foto.status;
     nodo.dataset.id = foto.id;
     nodo.style.setProperty('--giro', `${((indice % 5) - 2) * 0.6}deg`);
+    nodo.style.setProperty('--i', String(Math.min(indice, 14)));
 
     const img = $('.admin-card__img', nodo);
     const marco = $('.admin-card__marco', nodo);
@@ -470,6 +569,9 @@ const AdminModule = (() => {
     if (!foto) { cerrarVisor(); return; }
     const el = elementos();
 
+    el.visorImagen.classList.remove('lb-in');
+    void el.visorImagen.offsetWidth; // reinicia la animación
+    el.visorImagen.classList.add('lb-in');
     el.visorImagen.onerror = () => { el.visorImagen.onerror = null; el.visorImagen.src = placeholderAdmin(); };
     el.visorImagen.src = agrandarMiniaturaDrive(foto.thumbUrl, 1600) || foto.viewUrl || placeholderAdmin();
     el.visorImagen.alt = `Fotografía de ${categoryLabel(foto.category)}`;
@@ -500,45 +602,58 @@ const AdminModule = (() => {
     nodo.classList.add('admin-card--saliendo');
     setTimeout(() => {
       nodo.remove();
-      if (!$('.admin-card', elementos().grid)) elementos().vacio.hidden = false;
+      if (!$('.admin-card', elementos().grid) && !pendientesRender.length) elementos().vacio.hidden = false;
     }, 260);
   }
 
+  /**
+   * Moderar y eliminar son OPTIMISTAS: la pantalla cambia al instante y la
+   * petición viaja en segundo plano (Apps Script tarda 1-3 s por llamada, que
+   * se sentían como el panel "lento"). Si el servidor falla, se revierte y se avisa.
+   */
   async function moderar(id, nuevoEstado, nodo) {
-    const botones = $$('button', nodo);
-    botones.forEach((b) => { b.disabled = true; });
+    const foto = todas.find((f) => f.id === id);
+    if (!foto || foto.status === nuevoEstado) return;
+    const estadoAnterior = foto.status;
+    foto.status = nuevoEstado;
+    actualizarResumen(calcularResumenLocal());
+    announce(nuevoEstado === 'publicada' ? 'Fotografía aprobada.' : 'Fotografía ocultada.');
+    mostrarToast(nuevoEstado === 'publicada' ? 'Fotografía aprobada' : 'Fotografía ocultada');
+    if (filtroActual !== 'todas' && filtroActual !== nuevoEstado) {
+      quitarTarjetaConAnimacion(nodo);
+    } else {
+      nodo.dataset.status = nuevoEstado;
+      $('.admin-card__estado', nodo).textContent = ETIQUETA_ESTADO[nuevoEstado];
+    }
     try {
-      const datos = await post('adminModerar', { token, id, status: nuevoEstado });
-      actualizarResumen(datos.resumen);
-      announce(nuevoEstado === 'publicada' ? 'Fotografía aprobada.' : 'Fotografía ocultada.');
-      if (filtroActual !== 'todas' && filtroActual !== nuevoEstado) {
-        quitarTarjetaConAnimacion(nodo);
-      } else {
-        nodo.dataset.status = nuevoEstado;
-        $('.admin-card__estado', nodo).textContent = ETIQUETA_ESTADO[nuevoEstado];
-        const fotoActualizada = fotosActuales.find((f) => f.id === id);
-        if (fotoActualizada) fotoActualizada.status = nuevoEstado;
-        botones.forEach((b) => { b.disabled = false; });
-      }
+      await post('adminModerar', { token, id, status: nuevoEstado });
     } catch (err) {
+      foto.status = estadoAnterior;
+      actualizarResumen(calcularResumenLocal());
       if (err.codigo === 'SESION_INVALIDA') { cerrarSesion('Tu sesión expiró. Vuelve a iniciar sesión.'); return; }
       announce('No se pudo actualizar la fotografía. Intenta de nuevo.', true);
-      botones.forEach((b) => { b.disabled = false; });
+      mostrarToast('No se pudo actualizar. Se deshizo el cambio.', 'error');
+      renderGrid();
     }
   }
 
   async function eliminar(id, nodo) {
-    const botones = $$('button', nodo);
-    botones.forEach((b) => { b.disabled = true; });
+    const posicion = todas.findIndex((f) => f.id === id);
+    if (posicion === -1) return;
+    const [foto] = todas.splice(posicion, 1);
+    actualizarResumen(calcularResumenLocal());
+    announce('Fotografía eliminada permanentemente.');
+    mostrarToast('Fotografía eliminada');
+    quitarTarjetaConAnimacion(nodo);
     try {
-      const datos = await post('adminEliminar', { token, id });
-      actualizarResumen(datos.resumen);
-      announce('Fotografía eliminada permanentemente.');
-      quitarTarjetaConAnimacion(nodo);
+      await post('adminEliminar', { token, id });
     } catch (err) {
+      todas.splice(posicion, 0, foto);
+      actualizarResumen(calcularResumenLocal());
       if (err.codigo === 'SESION_INVALIDA') { cerrarSesion('Tu sesión expiró. Vuelve a iniciar sesión.'); return; }
       announce('No se pudo eliminar la fotografía. Intenta de nuevo.', true);
-      botones.forEach((b) => { b.disabled = false; });
+      mostrarToast('No se pudo eliminar. Se restauró la foto.', 'error');
+      renderGrid();
     }
   }
 
@@ -683,6 +798,13 @@ const AdminModule = (() => {
     $$('[data-cerrar-visor]').forEach((btn) => btn.addEventListener('click', cerrarVisor));
     el.visorPrev.addEventListener('click', visorAnterior);
     el.visorNext.addEventListener('click', visorSiguiente);
+    let toqueX = 0;
+    const panelVisor = el.visor.querySelector('.visor-modal__panel');
+    panelVisor.addEventListener('touchstart', (e) => { toqueX = e.changedTouches[0].clientX; }, { passive: true });
+    panelVisor.addEventListener('touchend', (e) => {
+      const delta = e.changedTouches[0].clientX - toqueX;
+      if (Math.abs(delta) > 60) (delta < 0 ? visorSiguiente() : visorAnterior());
+    }, { passive: true });
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !el.modalDescarga.hidden) cerrarModalDescarga();

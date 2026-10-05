@@ -27,8 +27,8 @@
 <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,500&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=3">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,500&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
 
@@ -42,6 +42,7 @@
     <symbol id="icon-arrow-left" viewBox="0 0 24 24"><path d="M15 5L8 12L15 19" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="icon-arrow-right" viewBox="0 0 24 24"><path d="M9 5L16 12L9 19" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="M5 9L12 16L19 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="icon-arrow-up" viewBox="0 0 24 24"><path d="M12 19V6M12 6L6.5 11.5M12 6L17.5 11.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="icon-close" viewBox="0 0 24 24"><path d="M6 6L18 18M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
     <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7H20M4 12H20M4 17H20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
     <symbol id="icon-heart" viewBox="0 0 24 24"><path d="M12 20.2C12 20.2 3.6 15.3 3.6 9.3C3.6 6.4 5.8 4.5 8.3 4.5C9.9 4.5 11.3 5.3 12 6.6C12.7 5.3 14.1 4.5 15.7 4.5C18.2 4.5 20.4 6.4 20.4 9.3C20.4 15.3 12 20.2 12 20.2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
@@ -345,6 +346,15 @@
   <p class="site-footer__frase">Con cariño, para siempre.</p>
 </footer>
 
+<!-- ============ VOLVER ARRIBA ============ -->
+<button type="button" class="scroll-top" id="scroll-top" data-visible="false" aria-label="Volver al inicio de la página" tabindex="-1">
+  <svg class="scroll-top__anillo" viewBox="0 0 48 48" aria-hidden="true">
+    <circle class="scroll-top__pista" cx="24" cy="24" r="22.5" pathLength="100"/>
+    <circle class="scroll-top__progreso" cx="24" cy="24" r="22.5" pathLength="100"/>
+  </svg>
+  <svg class="scroll-top__flecha" aria-hidden="true"><use href="#icon-arrow-up"></use></svg>
+</button>
+
 <!-- ============ BOTÓN FLOTANTE MÓVIL ============ -->
 <button type="button" class="fab-subir" id="fab-subir" data-scroll-to="subir" aria-label="Subir fotografías">
   <svg aria-hidden="true"><use href="#icon-upload"></use></svg>
@@ -456,7 +466,7 @@
   </li>
 </template>
 
-<script src="config.js?v=3" defer></script>
-<script src="script.js?v=3" defer></script>
+<script src="config.js?v=8" defer></script>
+<script src="script.js?v=8" defer></script>
 </body>
 </html>

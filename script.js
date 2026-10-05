@@ -612,6 +612,11 @@ const GalleryModule = (() => {
     const favBtn = $('.foto-card__favorito', nodo);
 
     marco.style.setProperty('--ratio', calcularRatioTarjeta(foto, indice));
+    nodo.style.setProperty('--delay', `${Math.min(indice % 8, 7) * 55}ms`);
+    img.classList.add('is-loading');
+    const quitarCarga = () => img.classList.remove('is-loading');
+    img.addEventListener('load', quitarCarga);
+    img.addEventListener('error', quitarCarga);
 
     withPlaceholderFallback(img, 'foto');
     img.src = foto.thumbUrl || foto.viewUrl || placeholderDataUri({ tone: 'foto' });
@@ -885,6 +890,9 @@ const LightboxModule = (() => {
     const foto = lista[indice];
     if (!foto) return;
     withPlaceholderFallback(el.imagen, 'foto');
+    el.imagen.classList.remove('lb-in');
+    void el.imagen.offsetWidth; // reinicia la animación de entrada
+    el.imagen.classList.add('lb-in');
     el.imagen.src = agrandarMiniaturaDrive(foto.thumbUrl, 1600) || foto.viewUrl || placeholderDataUri({ tone: 'foto' });
     el.imagen.alt = `Fotografía de ${categoryLabel(foto.category)}`;
 
@@ -1522,6 +1530,124 @@ const FabModule = (() => {
 })();
 
 /* ==========================================================================
+   EFECTOS — micro-interacciones (solo con puntero fino y sin reduced-motion)
+   ========================================================================== */
+const FxModule = (() => {
+  function crearBarraProgreso() {
+    const barra = document.createElement('div');
+    barra.className = 'scroll-progress';
+    barra.setAttribute('aria-hidden', 'true');
+    document.body.prepend(barra);
+  }
+
+  /** La barra de navegación gana cuerpo al salir de la parte alta (IntersectionObserver, sin listener de scroll). */
+  function navAlHacerScroll() {
+    const nav = $('#nav');
+    if (!nav) return;
+    const centinela = document.createElement('div');
+    centinela.setAttribute('aria-hidden', 'true');
+    centinela.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:48px;pointer-events:none;';
+    document.body.prepend(centinela);
+    new IntersectionObserver(([e]) => nav.classList.toggle('is-scrolled', !e.isIntersecting)).observe(centinela);
+  }
+
+  /** Botones "magnéticos": se inclinan unos píxeles hacia el puntero. */
+  function botonesMagneticos() {
+    $$('.btn--primary, .btn--outline').forEach((btn) => {
+      btn.addEventListener('pointermove', (e) => {
+        const r = btn.getBoundingClientRect();
+        btn.style.setProperty('--mx', `${((e.clientX - r.left - r.width / 2) * 0.14).toFixed(1)}px`);
+        btn.style.setProperty('--my', `${((e.clientY - r.top - r.height / 2) * 0.22).toFixed(1)}px`);
+      });
+      btn.addEventListener('pointerleave', () => { btn.style.setProperty('--mx', '0px'); btn.style.setProperty('--my', '0px'); });
+    });
+  }
+
+  /** Inclinación 3D suave en las fotografías destacadas (se delega: se crean dinámicamente). */
+  function inclinacionDestacadas() {
+    const cont = $('#destacadas-composicion');
+    if (!cont) return;
+    cont.addEventListener('pointermove', (e) => {
+      const fig = e.target.closest('.destacada-principal, .destacada-secundaria');
+      if (!fig) return;
+      const r = fig.getBoundingClientRect();
+      const nx = (e.clientX - r.left) / r.width - 0.5;
+      const ny = (e.clientY - r.top) / r.height - 0.5;
+      fig.style.setProperty('--ry', `${(nx * 5).toFixed(2)}deg`);
+      fig.style.setProperty('--rx', `${(-ny * 5).toFixed(2)}deg`);
+    });
+    cont.addEventListener('pointerout', (e) => {
+      const fig = e.target.closest('.destacada-principal, .destacada-secundaria');
+      if (!fig || fig.contains(e.relatedTarget)) return;
+      fig.style.setProperty('--ry', '0deg');
+      fig.style.setProperty('--rx', '0deg');
+    });
+  }
+
+  /** Foco de luz que sigue al puntero sobre la zona de subida. */
+  function focoDropzone() {
+    const dz = $('#dropzone');
+    if (!dz) return;
+    dz.addEventListener('pointermove', (e) => {
+      const r = dz.getBoundingClientRect();
+      dz.style.setProperty('--px', `${e.clientX - r.left}px`);
+      dz.style.setProperty('--py', `${e.clientY - r.top}px`);
+    });
+  }
+
+  function init() {
+    crearBarraProgreso();
+    navAlHacerScroll();
+    if (prefersReducedMotion()) return;
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    botonesMagneticos();
+    inclinacionDestacadas();
+    focoDropzone();
+  }
+  return { init };
+})();
+
+/* ==========================================================================
+   VOLVER ARRIBA — aparece al salir del hero; el anillo muestra cuánto se leyó
+   ========================================================================== */
+const ScrollTopModule = (() => {
+  function init() {
+    const boton = $('#scroll-top');
+    const hero = $('#hero');
+    if (!boton || !hero) return;
+
+    // Visible solo cuando el hero ya no está en pantalla (IntersectionObserver: sin listener de scroll).
+    new IntersectionObserver(([entrada]) => {
+      const visible = !entrada.isIntersecting;
+      boton.dataset.visible = String(visible);
+      boton.tabIndex = visible ? 0 : -1; // oculto = fuera del orden de tabulación
+    }, { threshold: 0 }).observe(hero);
+
+    // Respaldo del anillo de progreso para navegadores sin scroll-timeline (Safari/Firefox antiguos).
+    if (!(window.CSS && CSS.supports && CSS.supports('animation-timeline: scroll()'))) {
+      const anillo = $('.scroll-top__progreso', boton);
+      let pendiente = false;
+      window.addEventListener('scroll', () => {
+        if (pendiente) return;
+        pendiente = true;
+        requestAnimationFrame(() => {
+          const max = document.documentElement.scrollHeight - window.innerHeight;
+          const p = max > 0 ? clamp(window.scrollY / max, 0, 1) : 0;
+          anillo.style.strokeDashoffset = String(100 - p * 100);
+          pendiente = false;
+        });
+      }, { passive: true });
+    }
+
+    boton.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+      announce('Has vuelto al inicio de la página.');
+    });
+  }
+  return { init };
+})();
+
+/* ==========================================================================
    ARRANQUE DE LA APLICACIÓN
    ========================================================================== */
 function aplicarTextosDeFecha() {
@@ -1610,4 +1736,6 @@ document.addEventListener('DOMContentLoaded', () => {
   UploadQueueModule.init();
   FabModule.init();
   GraciasFlourishModule.init();
+  FxModule.init();
+  ScrollTopModule.init();
 });
