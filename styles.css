@@ -1140,3 +1140,23 @@ body::after {
 .lightbox__figura img { transition: filter 500ms var(--ease-spring), opacity 300ms var(--ease-spring); }
 .lightbox__figura img.es-cargando { filter: blur(8px); }
 @media (prefers-reduced-motion: reduce) { .ui-select__lista, .ui-select__velo { animation: none !important; } }
+
+/* ==========================================================================
+   VISOR PÚBLICO — apertura rápida
+   ========================================================================== */
+/* Reserva el espacio de la barra de scroll: al abrir el visor (body overflow:hidden) la página ya no
+   se ensancha y la galería de columnas no se recalcula entera (era un salto visible y lento). */
+html { scrollbar-gutter: stable; }
+.lightbox__overlay { animation-duration: 220ms; }
+.lightbox:not([hidden]) .lightbox__figura { animation: lbIn 280ms var(--ease-spring); }
+.lightbox__figura img.lb-in { animation: lbSwap 260ms var(--ease-spring); }
+/* Sin blur sobre una imagen grande (costoso): mientras llega la versión nítida solo se atenúa un poco. */
+.lightbox__figura img.es-cargando { filter: none; opacity: 0.82; }
+.lightbox__figura img { transition: opacity 300ms var(--ease-spring); }
+.lightbox__cerrar, .lightbox__nav { transition: transform 350ms var(--ease-spring), background-color 200ms var(--ease-spring); }
+/* Con el visor abierto, lo que hay detrás no debe seguir animándose. */
+body.no-scroll .hero__photo, body.no-scroll .gracias__bg img, body.no-scroll .hero__content::before,
+body.no-scroll .scroll-top__progreso, body.no-scroll .fab-subir::after, body.no-scroll .monogram--hero svg { animation-play-state: paused; }
+.lightbox { cursor: zoom-out; }
+.lightbox #lightbox-imagen, .lightbox button, .lightbox a, .lightbox #lightbox-caption { cursor: auto; }
+.lightbox button, .lightbox a { cursor: pointer; }

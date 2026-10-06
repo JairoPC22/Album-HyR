@@ -649,6 +649,9 @@ const GalleryModule = (() => {
       });
     }
 
+    const adelantar = () => precargarFotoGrande(foto);
+    boton.addEventListener('pointerenter', adelantar, { once: true });
+    boton.addEventListener('touchstart', adelantar, { once: true, passive: true });
     boton.addEventListener('click', () => {
       // En "Mis favoritas" la lista visible NO es state.fotos (la de la categoría
       // cargada): usarla abría la foto equivocada o ninguna (índice -1).
@@ -863,6 +866,23 @@ const DestacadasModule = (() => {
   return { init };
 })();
 
+/** Ancho de miniatura de Drive acorde a la pantalla: ni más pesada de lo necesario ni borrosa. */
+function anchoParaVisor() {
+  const px = Math.max(window.innerWidth * 0.92, window.innerHeight * 0.68) * Math.min(window.devicePixelRatio || 1, 2);
+  return clamp(Math.round(px / 100) * 100, 800, 1400);
+}
+const precargadas = new Set();
+/** Baja la foto grande en segundo plano (se llama al acercar el dedo/mouse a una tarjeta y para las vecinas). */
+function precargarFotoGrande(foto) {
+  if (!foto || !foto.thumbUrl) return;
+  const url = agrandarMiniaturaDrive(foto.thumbUrl, anchoParaVisor());
+  if (!url || precargadas.has(url)) return;
+  precargadas.add(url);
+  const img = new Image();
+  img.decoding = 'async';
+  img.src = url;
+}
+
 /* ==========================================================================
    LIGHTBOX — visor a pantalla completa compartido
    ========================================================================== */
@@ -893,13 +913,20 @@ const LightboxModule = (() => {
     el.imagen.classList.remove('lb-in');
     void el.imagen.offsetWidth; // reinicia la animación de entrada
     el.imagen.classList.add('lb-in');
-    const grande = agrandarMiniaturaDrive(foto.thumbUrl, 1400) || foto.viewUrl || placeholderDataUri({ tone: 'foto' });
+    const grande = agrandarMiniaturaDrive(foto.thumbUrl, anchoParaVisor()) || foto.viewUrl || placeholderDataUri({ tone: 'foto' });
     if (foto.thumbUrl && grande !== foto.thumbUrl) {
       // Se muestra YA la miniatura (el navegador la tiene en caché desde la galería) y la grande reemplaza cuando termina de bajar.
       el.imagen.classList.add('es-cargando');
       el.imagen.src = foto.thumbUrl;
       const precarga = new Image();
-      precarga.onload = () => { if (lista[indice] === foto) { el.imagen.src = grande; el.imagen.classList.remove('es-cargando'); } };
+      precarga.onload = () => {
+        if (lista[indice] !== foto) return;
+        el.imagen.src = grande;
+        el.imagen.classList.remove('es-cargando');
+        // Con la actual ya lista, se adelantan las vecinas: pasar de foto es instantáneo.
+        precargarFotoGrande(lista[(indice + 1) % lista.length]);
+        precargarFotoGrande(lista[(indice - 1 + lista.length) % lista.length]);
+      };
       precarga.onerror = () => el.imagen.classList.remove('es-cargando');
       precarga.src = grande;
     } else {
@@ -978,6 +1005,12 @@ const LightboxModule = (() => {
   function init() {
     const el = elementos();
     $$('[data-cerrar-lightbox]').forEach((n) => n.addEventListener('click', close));
+    // El panel ocupa toda la pantalla y queda ENCIMA del fondo oscuro, así que un toque "afuera" nunca llegaba al
+    // fondo. Se cierra con cualquier toque que no sea sobre la foto, el texto ni los botones.
+    el.raiz.addEventListener('click', (e) => {
+      if (e.target.closest('#lightbox-imagen, #lightbox-caption, button, a, .lightbox__pie')) return;
+      close();
+    });
     el.prev.addEventListener('click', anterior);
     el.next.addEventListener('click', siguiente);
     el.favorito.addEventListener('click', () => {
