@@ -721,12 +721,28 @@ function insertarFotoEnCelda_(pagina, blob, fila, celda, colorFondo) {
   return celda;
 }
 
+/**
+ * Quita el contorno de una forma de Slides. `getBorder().setTransparent()` por sí solo NO bastaba al exportar a
+ * PDF: los rectángulos que tapan el sobrante de una foto recortada dejaban una línea oscura fina en sus bordes
+ * (arriba y a un lado de la foto). Ahora el contorno se pinta del MISMO color que el relleno y con grosor
+ * mínimo, así que aunque el exportador lo dibuje, es invisible.
+ */
+function quitarBorde_(forma, colorRelleno) {
+  try {
+    const borde = forma.getBorder();
+    if (colorRelleno) borde.setSolidFill(colorRelleno); else borde.setTransparent();
+    borde.setWeight(0.01);
+  } catch (err) {
+    try { forma.getBorder().setTransparent(); } catch (err2) { /* sin contorno que quitar */ }
+  }
+}
+
 /** Rectángulo del color de fondo que "tapa" el sobrante de una foto en modo cover (recorte falso). */
 function dibujarFranjaOculta_(pagina, x, y, w, h, colorFondo) {
   if (w <= 0.5 || h <= 0.5) return;
   const franja = pagina.insertShape(SlidesApp.ShapeType.RECTANGLE, x, y, w, h);
   franja.getFill().setSolidFill(colorFondo);
-  franja.getBorder().setTransparent();
+  quitarBorde_(franja, colorFondo);
 }
 
 /* ---------- Plantillas de página: cada una devuelve un arreglo de celdas {x,y,w,h} ---------- */
@@ -1099,7 +1115,7 @@ function dibujarPieDePagina_(pagina, ANCHO, ALTO, numeroPagina) {
     const lineaY = ALTO * 0.9;
     const linea = pagina.insertShape(SlidesApp.ShapeType.RECTANGLE, cx - ANCHO * 0.035, lineaY, ANCHO * 0.07, 0.6);
     linea.getFill().setSolidFill('#6B5D50');
-    linea.getBorder().setTransparent();
+    quitarBorde_(linea, '#6B5D50');
 
     // Misma tipografía y color que el monograma "H & R" de la portada
     // (Georgia, sin cursiva, carbón), solo que a un tamaño de pie de página.
@@ -1216,13 +1232,16 @@ function dibujarLeyendaDebajo_(pagina, fila, celdaOriginal, celdaFoto, ALTO) {
     // pegados, y con la raya ya quitada hacía falta ese respiro para que se
     // lean como dos líneas distintas, no una encima de la otra.
     const espacio = Math.min(ALTO * 0.042, alturaDisponible * 0.3);
-    const anchoPromedioChar = tamFontTexto * 0.52;
-    const charsPorLinea = Math.max(10, Math.floor(celdaOriginal.w / anchoPromedioChar));
+    // Georgia cursiva mide ~0.58 em por letra, y el cuadro de texto pierde ~14 pt por sus márgenes internos:
+    // con 0.52 y el ancho completo se calculaban MENOS líneas de las reales y la cita pisaba el nombre.
+    const anchoPromedioChar = tamFontTexto * 0.58;
+    const charsPorLinea = Math.max(10, Math.floor((celdaOriginal.w - 16) / anchoPromedioChar));
     const lineasTexto = Math.min(3, Math.max(1, Math.ceil((texto.length + 2) / charsPorLinea)));
     // El nombre es siempre una sola línea corta: alto fijo, chico.
     const altoNombre = Math.min(tamFontNombre * 1.6, alturaDisponible * 0.4);
     const altoTextoMax = Math.max(0, alturaDisponible - altoNombre - espacio);
-    const altoTexto = Math.min(altoTextoMax, lineasTexto * tamFontTexto * 1.6);
+    // Alto real por línea = tamaño * ~1.2 (Georgia) * 1.45 (interlineado) ≈ 1.75, más márgenes internos del cuadro.
+    const altoTexto = Math.min(altoTextoMax, lineasTexto * tamFontTexto * 1.8 + 8);
 
     const cuadroTexto = pagina.insertTextBox(`“${texto}”`, celdaOriginal.x, inicioY, celdaOriginal.w, altoTexto);
     const estiloTexto = cuadroTexto.getText().getTextStyle();
@@ -1250,7 +1269,7 @@ function dibujarLeyendaSuperpuesta_(pagina, fila, celda, ALTO) {
 
     const franja = pagina.insertShape(SlidesApp.ShapeType.RECTANGLE, celda.x, y, celda.w, altoFranja);
     franja.getFill().setSolidFill('#2E2A26', 0.55);
-    franja.getBorder().setTransparent();
+    quitarBorde_(franja, '#2E2A26');
 
     // Mismo criterio que la dedicatoria "debajo": el nombre va con un guion
     // largo delante, en una línea chica y fija; la cita usa el resto.
@@ -1332,7 +1351,7 @@ function dibujarPortadaAlbum_(portada, ANCHO, ALTO, fotoPortada) {
     const cx = ANCHO / 2;
     const linea = portada.insertShape(SlidesApp.ShapeType.RECTANGLE, cx - ANCHO * 0.03, bloqueY + bloqueH * 0.7, ANCHO * 0.06, 1);
     linea.getFill().setSolidFill('#6B5D50');
-    linea.getBorder().setTransparent();
+    quitarBorde_(linea, '#6B5D50');
 
     const nombres = portada.insertTextBox('HÉCTOR  +  RAQUEL', ANCHO * 0.1, bloqueY + bloqueH * 0.76, ANCHO * 0.8, bloqueH * 0.14);
     const estiloNombres = nombres.getText().getTextStyle();
