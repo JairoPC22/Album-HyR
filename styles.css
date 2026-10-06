@@ -1157,6 +1157,8 @@ html { scrollbar-gutter: stable; }
 /* Con el visor abierto, lo que hay detrás no debe seguir animándose. */
 body.no-scroll .hero__photo, body.no-scroll .gracias__bg img, body.no-scroll .hero__content::before,
 body.no-scroll .scroll-top__progreso, body.no-scroll .fab-subir::after, body.no-scroll .monogram--hero svg { animation-play-state: paused; }
-.lightbox { cursor: zoom-out; }
-.lightbox #lightbox-imagen, .lightbox button, .lightbox a, .lightbox #lightbox-caption { cursor: auto; }
+/* Cursor estándar (el "zoom-out" dejaba el puntero invisible sobre el fondo oscuro en algunos equipos):
+   mano al tocar la zona vacía (cierra) y flecha normal sobre la foto y el texto. */
+.lightbox, .lightbox__panel, .lightbox__overlay { cursor: pointer; }
+.lightbox #lightbox-imagen, .lightbox #lightbox-caption, .lightbox__figura { cursor: default; }
 .lightbox button, .lightbox a { cursor: pointer; }
