@@ -1149,7 +1149,11 @@ function dibujarPieDePagina_(pagina, ANCHO, ALTO, numeroPagina) {
 function truncarTexto_(texto, maxCaracteres) {
   const limpio = String(texto || '').trim();
   if (limpio.length <= maxCaracteres) return limpio;
-  return `${limpio.slice(0, maxCaracteres - 1).trim()}…`;
+  // Se corta en el último espacio (nunca a media palabra, como "con u…"), salvo que eso deje muy poco texto.
+  let corte = limpio.slice(0, maxCaracteres - 1);
+  const ultimoEspacio = corte.lastIndexOf(' ');
+  if (ultimoEspacio > maxCaracteres * 0.6) corte = corte.slice(0, ultimoEspacio);
+  return `${corte.trim()}…`;
 }
 
 /**
@@ -1214,22 +1218,24 @@ function insertarFotoConDedicatoria_(pagina, item, celda, ANCHO, ALTO) {
 }
 
 /**
- * Mide cuánto espacio necesita la leyenda (cita + nombre) para un ancho dado. Georgia cursiva ≈ 0.58 em por letra,
- * el cuadro de texto pierde ~16 pt por márgenes internos y cada línea ocupa ≈ 1.8 × el tamaño de letra.
+ * Mide cuánto espacio necesita la leyenda (cita + nombre) para un ancho dado. Medido sobre un PDF real: Georgia
+ * cursiva ≈ 0.46 em por letra (0.58 sobreestimaba y partía en 2 líneas citas que cabían en 1, recortándolas
+ * y dejando espacio vacío debajo), el cuadro de texto pierde 14.4 pt por márgenes internos y cada línea ocupa
+ * ≈ 1.7 × el tamaño de letra (1.2 de la fuente × 145 % de interlineado).
  */
 function medirLeyenda_(fila, anchoCelda, ALTO) {
   const tamFontTexto = Math.round(ALTO * 0.024);
   const tamFontNombre = Math.round(ALTO * 0.017);
   const texto = truncarTexto_(fila.dedication, 105);
-  const charsPorLinea = Math.max(10, Math.floor((anchoCelda - 16) / (tamFontTexto * 0.58)));
+  const charsPorLinea = Math.max(10, Math.floor((anchoCelda - 14.4) / (tamFontTexto * 0.47)));
   const lineas = Math.min(3, Math.max(1, Math.ceil((texto.length + 2) / charsPorLinea)));
   const margenSup = ALTO * 0.016;
   const espacio = ALTO * 0.014;
   const altoNombre = tamFontNombre * 1.7;
-  const altoPorLinea = tamFontTexto * 1.8;
+  const altoPorLinea = tamFontTexto * 1.7;
   return {
     texto, lineas, charsPorLinea, tamFontTexto, tamFontNombre, margenSup, espacio, altoNombre, altoPorLinea,
-    necesaria: margenSup + lineas * altoPorLinea + 8 + espacio + altoNombre,
+    necesaria: margenSup + lineas * altoPorLinea + 6 + espacio + altoNombre,
   };
 }
 
@@ -1244,14 +1250,14 @@ function dibujarLeyendaDebajo_(pagina, fila, celdaOriginal, celdaFoto, ALTO) {
 
     // Si aun así no caben todas las líneas, se acorta la cita en vez de dejar que se encime con el nombre.
     const disponibleTexto = alturaDisponible - m.altoNombre - m.espacio;
-    const maxLineas = Math.max(1, Math.floor((disponibleTexto - 8) / m.altoPorLinea));
+    const maxLineas = Math.max(1, Math.floor((disponibleTexto - 6) / m.altoPorLinea));
     let lineas = m.lineas;
     let texto = m.texto;
     if (lineas > maxLineas) {
       lineas = maxLineas;
       texto = truncarTexto_(m.texto, Math.max(8, lineas * m.charsPorLinea - 2));
     }
-    const altoTexto = lineas * m.altoPorLinea + 8;
+    const altoTexto = lineas * m.altoPorLinea + 6;
     // En vez de una raya separando la cita del nombre se usa un guion largo delante del nombre.
     const nombre = `—  ${espaciarLetras_(String(fila.guestName || '').trim() || 'Un invitado')}`;
 
