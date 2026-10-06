@@ -543,6 +543,22 @@ const AdminModule = (() => {
      VISOR DE FOTOGRAFÍA (modal, con navegación anterior/siguiente)
      ========================================================================== */
   let ultimoFocoAntesDelVisor = null;
+  let solicitudVisor = 0;
+  const imagenesPrecargadas = new Map();
+
+  /** Descarga una imagen en segundo plano; resuelve true/false. Recuerda las ya pedidas. */
+  function precargarImagen(url) {
+    if (!url) return Promise.resolve(false);
+    if (imagenesPrecargadas.has(url)) return imagenesPrecargadas.get(url);
+    const promesa = new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => { imagenesPrecargadas.delete(url); resolve(false); };
+      img.src = url;
+    });
+    imagenesPrecargadas.set(url, promesa);
+    return promesa;
+  }
 
   function abrirVisor(id) {
     const posicion = fotosActuales.findIndex((f) => f.id === id);
@@ -573,7 +589,26 @@ const AdminModule = (() => {
     void el.visorImagen.offsetWidth; // reinicia la animación
     el.visorImagen.classList.add('lb-in');
     el.visorImagen.onerror = () => { el.visorImagen.onerror = null; el.visorImagen.src = placeholderAdmin(); };
-    el.visorImagen.src = agrandarMiniaturaDrive(foto.thumbUrl, 1600) || foto.viewUrl || placeholderAdmin();
+    // Apertura rápida: se muestra YA la miniatura (la tarjeta ya la descargó) y la versión
+    // mediana la reemplaza al terminar de bajar. El modal mide ~540 px: pedir 1600 px era 3x más pesado de lo necesario.
+    const miniatura = foto.thumbUrl || foto.viewUrl || placeholderAdmin();
+    const mediana = agrandarMiniaturaDrive(foto.thumbUrl, 1000) || miniatura;
+    const solicitud = ++solicitudVisor;
+    el.visorImagen.src = miniatura;
+    if (mediana !== miniatura) {
+      el.visorImagen.classList.add('es-cargando');
+      precargarImagen(mediana).then((ok) => {
+        if (solicitud !== solicitudVisor) return;
+        if (ok) el.visorImagen.src = mediana;
+        el.visorImagen.classList.remove('es-cargando');
+        // Las vecinas se bajan en segundo plano: al pasar a la siguiente foto ya está lista.
+        [fotosActuales[indiceVisor + 1], fotosActuales[indiceVisor - 1]].forEach((v) => {
+          if (v && v.thumbUrl) precargarImagen(agrandarMiniaturaDrive(v.thumbUrl, 1000));
+        });
+      });
+    } else {
+      el.visorImagen.classList.remove('es-cargando');
+    }
     el.visorImagen.alt = `Fotografía de ${categoryLabel(foto.category)}`;
 
     el.visorCategoria.textContent = categoryLabel(foto.category);
@@ -794,6 +829,7 @@ const AdminModule = (() => {
     el.botonDescargar.addEventListener('click', abrirModalDescarga);
     $$('[data-cerrar-modal="descarga"]').forEach((btn) => btn.addEventListener('click', cerrarModalDescarga));
     el.formDescarga.addEventListener('submit', manejarSubmitDescarga);
+    if (typeof UiSelect !== 'undefined') UiSelect.mejorar(el.campoFiltroDescarga, { modo: 'tarjetas' });
 
     $$('[data-cerrar-visor]').forEach((btn) => btn.addEventListener('click', cerrarVisor));
     el.visorPrev.addEventListener('click', visorAnterior);

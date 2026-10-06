@@ -14,8 +14,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,500&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=8">
-<link rel="stylesheet" href="admin.css?v=8">
+<link rel="stylesheet" href="styles.css?v=11">
+<link rel="stylesheet" href="admin.css?v=11">
 </head>
 <body class="admin-body">
 
@@ -218,9 +218,9 @@
     <form id="form-descarga">
       <div class="campo-grupo">
         <label for="campo-filtro-descarga">¿Qué fotografías incluir?</label>
-        <select id="campo-filtro-descarga" name="filtro">
-          <option value="publicada">Solo las publicadas</option>
-          <option value="todas">Todas (incluye pendientes y ocultas)</option>
+        <select id="campo-filtro-descarga" name="filtro" data-ui-modo="tarjetas">
+          <option value="publicada" data-desc="Lo que ya ven los invitados en la galería.">Solo las publicadas</option>
+          <option value="todas" data-desc="Incluye también las pendientes y las ocultas.">Todas las fotografías</option>
         </select>
       </div>
       <button type="submit" class="btn btn--primary" id="btn-generar-descarga">
@@ -271,7 +271,8 @@
   <li class="admin-card admin-card--skeleton" aria-hidden="true"></li>
 </template>
 
-<script src="config.js?v=8" defer></script>
-<script src="admin.js?v=8" defer></script>
+<script src="config.js?v=11" defer></script>
+<script src="ui-select.js?v=11" defer></script>
+<script src="admin.js?v=11" defer></script>
 </body>
 </html>

@@ -893,7 +893,19 @@ const LightboxModule = (() => {
     el.imagen.classList.remove('lb-in');
     void el.imagen.offsetWidth; // reinicia la animación de entrada
     el.imagen.classList.add('lb-in');
-    el.imagen.src = agrandarMiniaturaDrive(foto.thumbUrl, 1600) || foto.viewUrl || placeholderDataUri({ tone: 'foto' });
+    const grande = agrandarMiniaturaDrive(foto.thumbUrl, 1400) || foto.viewUrl || placeholderDataUri({ tone: 'foto' });
+    if (foto.thumbUrl && grande !== foto.thumbUrl) {
+      // Se muestra YA la miniatura (el navegador la tiene en caché desde la galería) y la grande reemplaza cuando termina de bajar.
+      el.imagen.classList.add('es-cargando');
+      el.imagen.src = foto.thumbUrl;
+      const precarga = new Image();
+      precarga.onload = () => { if (lista[indice] === foto) { el.imagen.src = grande; el.imagen.classList.remove('es-cargando'); } };
+      precarga.onerror = () => el.imagen.classList.remove('es-cargando');
+      precarga.src = grande;
+    } else {
+      el.imagen.classList.remove('es-cargando');
+      el.imagen.src = grande;
+    }
     el.imagen.alt = `Fotografía de ${categoryLabel(foto.category)}`;
 
     const partes = [];
@@ -1445,6 +1457,7 @@ const UploadQueueModule = (() => {
 
   function init() {
     poblarCategorias();
+    if (typeof UiSelect !== 'undefined') UiSelect.mejorar(elementos().categoria); // menú propio en vez del <select> nativo
     const { dropzone, input, form, consentimiento } = elementos();
 
     dropzone.addEventListener('click', () => input.click());

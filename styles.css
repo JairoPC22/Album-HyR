@@ -1060,3 +1060,83 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   .scroll-top, .scroll-top__flecha { transition-duration: 1ms !important; }
 }
+
+/* ==========================================================================
+   UiSelect — menú desplegable propio (reemplaza el <select> nativo)
+   ========================================================================== */
+.ui-select__nativo { position: absolute !important; left: 0 !important; top: 0 !important; width: 1px !important; height: 1px !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; border: 0 !important; opacity: 0; pointer-events: none; overflow: hidden; clip: rect(0,0,0,0); }
+.ui-select { position: relative; }
+
+/* --- modo lista --- */
+.ui-select__boton {
+  width: 100%; min-height: 52px; padding: var(--space-3) var(--space-4); display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  text-align: left; border: 1.4px solid var(--color-beige); border-radius: 14px; background: rgba(255,255,255,0.92); font-size: 1rem; color: var(--color-texto);
+  transition: border-color 300ms var(--ease-spring), box-shadow 400ms var(--ease-spring), background-color 300ms var(--ease-spring);
+}
+.ui-select__boton:hover { border-color: var(--color-taupe); }
+.ui-select__boton:focus-visible, .ui-select[data-abierto="true"] .ui-select__boton { border-color: var(--color-dorado-oscuro); box-shadow: 0 0 0 4px rgba(107,93,80,0.14); background: #fff; outline: none; }
+.ui-select__valor { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-select--vacio .ui-select__valor { color: var(--color-texto-suave); }
+.ui-select__chevron { flex: none; width: 20px; height: 20px; color: var(--color-dorado-oscuro); transition: transform 450ms var(--ease-spring); }
+.ui-select[data-abierto="true"] .ui-select__chevron { transform: rotate(180deg); }
+
+.ui-select__lista {
+  position: absolute; z-index: 60; left: 0; right: 0; top: calc(100% + 8px); max-height: 288px; overflow-y: auto; overscroll-behavior: contain;
+  margin: 0; padding: 6px; list-style: none; background: #fff; border-radius: 18px;
+  box-shadow: 0 0 0 1px rgba(107,93,80,0.12), 0 4px 8px rgba(58,46,34,0.05), 0 28px 50px -18px rgba(58,46,34,0.38);
+  transform-origin: top center; animation: uiSelectIn 260ms var(--ease-spring);
+}
+.ui-select--arriba .ui-select__lista { top: auto; bottom: calc(100% + 8px); transform-origin: bottom center; }
+.ui-select__opcion {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 46px; padding: 10px 14px; border-radius: 12px;
+  cursor: pointer; font-size: 0.96rem; transition: background-color 160ms var(--ease-spring), color 160ms var(--ease-spring);
+}
+.ui-select__opcion.es-activa { background: var(--color-marfil); }
+.ui-select__opcion[aria-selected="true"] { font-weight: 600; color: var(--color-dorado-oscuro); }
+.ui-select__check { width: 18px; height: 18px; flex: none; opacity: 0; transform: scale(0.6); transition: opacity 250ms var(--ease-spring), transform 400ms var(--ease-spring); }
+.ui-select__opcion[aria-selected="true"] .ui-select__check { opacity: 1; transform: none; }
+.ui-select__velo { display: none; }
+@keyframes uiSelectIn { from { opacity: 0; transform: translateY(-6px) scale(0.97); } to { opacity: 1; transform: none; } }
+
+/* En celular la lista se abre como hoja inferior (más fácil de tocar). */
+@media (max-width: 640px) {
+  .ui-select__velo { display: block; position: fixed; inset: 0; z-index: 900; background: rgba(46,42,38,0.45); animation: fadeIn 250ms var(--ease-spring); }
+  .ui-select__velo[hidden] { display: none; }
+  .ui-select__lista {
+    position: fixed; z-index: 901; left: 8px; right: 8px; top: auto; bottom: max(8px, env(safe-area-inset-bottom)); max-height: 62dvh; border-radius: 24px; padding: 10px;
+    animation: hojaSubeSelect 420ms var(--ease-spring);
+  }
+  .ui-select__lista::before { content: ''; display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--color-gris-calido); margin: 2px auto 10px; }
+  .ui-select__opcion { min-height: 52px; font-size: 1rem; }
+}
+@keyframes hojaSubeSelect { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* --- modo tarjetas --- */
+.ui-select--tarjetas { display: grid; gap: var(--space-3); grid-template-columns: 1fr; }
+@media (min-width: 560px) { .ui-select--tarjetas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ui-select__tarjeta {
+  position: relative; display: flex; align-items: flex-start; gap: var(--space-3); min-height: 64px; padding: var(--space-4); text-align: left;
+  border: 1.4px solid var(--color-beige); border-radius: 18px; background: rgba(255,255,255,0.92);
+  transition: border-color 300ms var(--ease-spring), background-color 300ms var(--ease-spring), box-shadow 400ms var(--ease-spring), transform 450ms var(--ease-spring);
+}
+.ui-select__tarjeta:hover { border-color: var(--color-taupe); transform: translateY(-2px); }
+.ui-select__tarjeta:active { transform: scale(0.98); transition-duration: 120ms; }
+.ui-select__tarjeta[aria-checked="true"] { border-color: var(--color-carbon); background: var(--color-ivory); box-shadow: 0 0 0 3px rgba(46,42,38,0.08), var(--shadow-sm); }
+.ui-select__tarjeta:focus-visible { outline: 2.5px solid var(--color-dorado-oscuro); outline-offset: 3px; }
+.ui-select__marca { flex: none; width: 22px; height: 22px; margin-top: 1px; border-radius: 50%; border: 1.5px solid var(--color-taupe); display: grid; place-items: center; color: transparent; background: #fff; transition: background-color 300ms var(--ease-spring), border-color 300ms var(--ease-spring), color 300ms var(--ease-spring), transform 450ms var(--ease-spring); }
+.ui-select__marca-icono { width: 14px; height: 14px; }
+.ui-select__tarjeta[aria-checked="true"] .ui-select__marca { background: var(--color-carbon); border-color: var(--color-carbon); color: #fff; transform: scale(1.08); }
+.ui-select__textos { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ui-select__titulo { font-weight: 600; font-size: 0.95rem; line-height: 1.3; }
+.ui-select__desc { font-size: 0.8rem; color: var(--color-texto-suave); line-height: 1.4; }
+
+/* Superposiciones sin backdrop-filter: desenfocar toda la página detrás de un modal es muy costoso (se sentía lento al abrirlos). */
+.modal__overlay { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: rgba(46,42,38,0.55); }
+.menu-movil__overlay { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+@keyframes lbIn { from { opacity: 0; transform: scale(0.96) translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes lbSwap { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: none; } }
+.lightbox:not([hidden]) .lightbox__figura { animation-duration: 420ms; }
+.modal:not([hidden]) .modal__panel { animation-duration: 380ms; }
+.lightbox__figura img { transition: filter 500ms var(--ease-spring), opacity 300ms var(--ease-spring); }
+.lightbox__figura img.es-cargando { filter: blur(8px); }
+@media (prefers-reduced-motion: reduce) { .ui-select__lista, .ui-select__velo { animation: none !important; } }

@@ -525,3 +525,21 @@
 }
 /* Área táctil de 44px para el interruptor sin agrandarlo visualmente */
 .switch input { top: -6px; left: -6px; width: calc(100% + 12px); height: calc(100% + 12px); }
+
+/* ==========================================================================
+   RENDIMIENTO DEL PANEL — menos pintado, aperturas rápidas
+   ========================================================================== */
+.panel-header { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(255,255,255,0.95); }
+.visor-modal__overlay { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(46,42,38,0.58); }
+.admin-card__estado { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; background: rgba(46,42,38,0.84) !important; }
+.admin-card[data-status="pendiente"] .admin-card__estado::before { animation: none; }
+/* Las tarjetas fuera de pantalla no se pintan ni se maquetan hasta que se acercan. */
+.admin-card { content-visibility: auto; contain-intrinsic-size: auto 430px; }
+.admin-card__marco, .admin-card__marco.esta-lista { animation: none; background: var(--color-marfil); }
+.visor-modal__panel { animation-duration: 380ms; }
+@keyframes hojaSube { from { transform: translateY(60px); opacity: 0.4; } to { transform: translateY(0); opacity: 1; } }
+.visor-modal__imagen { transition: filter 450ms var(--ease-spring); }
+.visor-modal__imagen.es-cargando { filter: blur(10px); }
+.visor-modal__imagen.lb-in { animation-duration: 320ms; }
+#modal-descarga .modal__panel { animation-duration: 380ms; }
+.panel-descarga__etiqueta { display: block; font-size: 0.88rem; font-weight: 500; margin-bottom: var(--space-3); }
