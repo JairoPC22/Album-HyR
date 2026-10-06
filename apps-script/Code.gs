@@ -707,14 +707,18 @@ function insertarFotoEnCelda_(pagina, blob, fila, celda, colorFondo) {
 
   const sobranteX = anchoImg - celda.w;
   const sobranteY = altoImg - celda.h;
+  // Las franjas se hacen un poco MÁS GRANDES que el sobrante (M pt hacia afuera y a lo largo): Slides redondea
+  // posiciones y tamaños, y con franjas "justas" una rendija de 1 px de la imagen asomaba en el borde exterior
+  // — era la línea oscura fina que se veía arriba y al costado de la foto en el PDF.
+  const M = 3;
   if (sobranteX > 0.5) {
     const anchoFranja = sobranteX / 2;
-    dibujarFranjaOculta_(pagina, x, celda.y, anchoFranja, celda.h, fondo);
-    dibujarFranjaOculta_(pagina, celda.x + celda.w, celda.y, anchoFranja, celda.h, fondo);
+    dibujarFranjaOculta_(pagina, x - M, celda.y - M, anchoFranja + M, celda.h + 2 * M, fondo);
+    dibujarFranjaOculta_(pagina, celda.x + celda.w, celda.y - M, anchoFranja + M, celda.h + 2 * M, fondo);
   } else if (sobranteY > 0.5) {
     const altoFranja = sobranteY / 2;
-    dibujarFranjaOculta_(pagina, celda.x, y, celda.w, altoFranja, fondo);
-    dibujarFranjaOculta_(pagina, celda.x, celda.y + celda.h, celda.w, altoFranja, fondo);
+    dibujarFranjaOculta_(pagina, celda.x - M, y - M, celda.w + 2 * M, altoFranja + M, fondo);
+    dibujarFranjaOculta_(pagina, celda.x - M, celda.y + celda.h, celda.w + 2 * M, altoFranja + M, fondo);
   }
 
   // La foto llenó la celda por completo: el marco/leyenda usan la celda tal cual.
@@ -728,13 +732,14 @@ function insertarFotoEnCelda_(pagina, blob, fila, celda, colorFondo) {
  * mínimo, así que aunque el exportador lo dibuje, es invisible.
  */
 function quitarBorde_(forma, colorRelleno) {
-  try {
-    const borde = forma.getBorder();
-    if (colorRelleno) borde.setSolidFill(colorRelleno); else borde.setTransparent();
-    borde.setWeight(0.01);
-  } catch (err) {
-    try { forma.getBorder().setTransparent(); } catch (err2) { /* sin contorno que quitar */ }
+  // Cada paso va por separado: si uno falla en esta cuenta/versión de Slides, los demás se aplican igual.
+  let borde;
+  try { borde = forma.getBorder(); } catch (err) { return; }
+  try { borde.setWeight(0.1); } catch (err) { /* grosor mínimo no soportado */ }
+  if (colorRelleno) {
+    try { borde.setSolidFill(colorRelleno); return; } catch (err) { /* se intenta transparente */ }
   }
+  try { borde.setTransparent(); } catch (err) { /* sin contorno que quitar */ }
 }
 
 /** Rectángulo del color de fondo que "tapa" el sobrante de una foto en modo cover (recorte falso). */
@@ -1191,7 +1196,10 @@ function insertarFotoConDedicatoria_(pagina, item, celda, ANCHO, ALTO) {
     // lo que una cita corta + un nombre necesitan, y esa foto perdía
     // tamaño para nada. Ahora se reserva bastante menos, y le devuelve ese
     // espacio a la foto.
-    const altoLeyenda = Math.min(celda.h * 0.18, ALTO * 0.075);
+    // Se reserva lo que la cita + el nombre REALMENTE necesitan (antes un tope fijo dejaba sin espacio a las
+    // citas de dos líneas en celdas chicas y la 2.ª línea se encimaba con el nombre).
+    const medida = medirLeyenda_(item.fila, celda.w, ALTO);
+    const altoLeyenda = Math.min(celda.h * 0.4, Math.max(Math.min(celda.h * 0.18, ALTO * 0.075), medida.necesaria));
     const celdaFoto = { x: celda.x, y: celda.y, w: celda.w, h: celda.h - altoLeyenda };
     // bounds = el tamaño REAL con el que se dibujó la foto — si se encajó
     // completa (contain), puede ser bastante más chico que celdaFoto. La
@@ -1205,56 +1213,57 @@ function insertarFotoConDedicatoria_(pagina, item, celda, ANCHO, ALTO) {
   }
 }
 
+/**
+ * Mide cuánto espacio necesita la leyenda (cita + nombre) para un ancho dado. Georgia cursiva ≈ 0.58 em por letra,
+ * el cuadro de texto pierde ~16 pt por márgenes internos y cada línea ocupa ≈ 1.8 × el tamaño de letra.
+ */
+function medirLeyenda_(fila, anchoCelda, ALTO) {
+  const tamFontTexto = Math.round(ALTO * 0.024);
+  const tamFontNombre = Math.round(ALTO * 0.017);
+  const texto = truncarTexto_(fila.dedication, 105);
+  const charsPorLinea = Math.max(10, Math.floor((anchoCelda - 16) / (tamFontTexto * 0.58)));
+  const lineas = Math.min(3, Math.max(1, Math.ceil((texto.length + 2) / charsPorLinea)));
+  const margenSup = ALTO * 0.016;
+  const espacio = ALTO * 0.014;
+  const altoNombre = tamFontNombre * 1.7;
+  const altoPorLinea = tamFontTexto * 1.8;
+  return {
+    texto, lineas, charsPorLinea, tamFontTexto, tamFontNombre, margenSup, espacio, altoNombre, altoPorLinea,
+    necesaria: margenSup + lineas * altoPorLinea + 8 + espacio + altoNombre,
+  };
+}
+
 /** Dedicatoria debajo de la foto, para celdas con espacio de sobra. */
 function dibujarLeyendaDebajo_(pagina, fila, celdaOriginal, celdaFoto, ALTO) {
   try {
-    const inicioY = celdaFoto.y + celdaFoto.h + ALTO * 0.016;
+    const m = medirLeyenda_(fila, celdaOriginal.w, ALTO);
+    const inicioY = celdaFoto.y + celdaFoto.h + m.margenSup;
     const finY = celdaOriginal.y + celdaOriginal.h;
-    if (finY - inicioY < ALTO * 0.03) return; // no hay espacio real: mejor omitir que amontonar texto
-
-    const texto = truncarTexto_(fila.dedication, 105);
-    // En vez de una raya separando la cita del nombre (se veía como un
-    // renglón cruzando el texto, y a veces tapaba el nombre), se usa un
-    // guion largo delante del nombre — el mismo recurso tipográfico de una
-    // atribución de cita, sin dibujar ninguna forma extra.
-    const nombre = `—  ${espaciarLetras_(String(fila.guestName || '').trim() || 'Un invitado')}`;
-
-    const tamFontTexto = Math.round(ALTO * 0.024);
-    const tamFontNombre = Math.round(ALTO * 0.017);
-
-    // El cuadro de la cita se calcula según cuántas líneas va a necesitar
-    // de verdad (estimado por su longitud y el ancho disponible), NO según
-    // todo el espacio que sobra debajo de la foto. Antes ese cuadro ocupaba
-    // siempre el sobrante completo y, como el texto se ancla arriba, una
-    // cita corta como "TQM" dejaba un hueco enorme antes del nombre.
     const alturaDisponible = finY - inicioY;
-    // Un poco de aire entre la cita y el nombre — antes quedaban casi
-    // pegados, y con la raya ya quitada hacía falta ese respiro para que se
-    // lean como dos líneas distintas, no una encima de la otra.
-    const espacio = Math.min(ALTO * 0.042, alturaDisponible * 0.3);
-    // Georgia cursiva mide ~0.58 em por letra, y el cuadro de texto pierde ~14 pt por sus márgenes internos:
-    // con 0.52 y el ancho completo se calculaban MENOS líneas de las reales y la cita pisaba el nombre.
-    const anchoPromedioChar = tamFontTexto * 0.58;
-    const charsPorLinea = Math.max(10, Math.floor((celdaOriginal.w - 16) / anchoPromedioChar));
-    const lineasTexto = Math.min(3, Math.max(1, Math.ceil((texto.length + 2) / charsPorLinea)));
-    // El nombre es siempre una sola línea corta: alto fijo, chico.
-    const altoNombre = Math.min(tamFontNombre * 1.6, alturaDisponible * 0.4);
-    const altoTextoMax = Math.max(0, alturaDisponible - altoNombre - espacio);
-    // Alto real por línea = tamaño * ~1.2 (Georgia) * 1.45 (interlineado) ≈ 1.75, más márgenes internos del cuadro.
-    const altoTexto = Math.min(altoTextoMax, lineasTexto * tamFontTexto * 1.8 + 8);
+    if (alturaDisponible < ALTO * 0.03) return; // no hay espacio real: mejor omitir que amontonar texto
+
+    // Si aun así no caben todas las líneas, se acorta la cita en vez de dejar que se encime con el nombre.
+    const disponibleTexto = alturaDisponible - m.altoNombre - m.espacio;
+    const maxLineas = Math.max(1, Math.floor((disponibleTexto - 8) / m.altoPorLinea));
+    let lineas = m.lineas;
+    let texto = m.texto;
+    if (lineas > maxLineas) {
+      lineas = maxLineas;
+      texto = truncarTexto_(m.texto, Math.max(8, lineas * m.charsPorLinea - 2));
+    }
+    const altoTexto = lineas * m.altoPorLinea + 8;
+    // En vez de una raya separando la cita del nombre se usa un guion largo delante del nombre.
+    const nombre = `—  ${espaciarLetras_(String(fila.guestName || '').trim() || 'Un invitado')}`;
 
     const cuadroTexto = pagina.insertTextBox(`“${texto}”`, celdaOriginal.x, inicioY, celdaOriginal.w, altoTexto);
     const estiloTexto = cuadroTexto.getText().getTextStyle();
-    estiloTexto.setFontFamily('Georgia').setItalic(true).setFontSize(tamFontTexto).setForegroundColor('#2E2A26');
-    // Más interlineado: a este tamaño, Georgia itálica se siente apretada
-    // entre línea y línea (y entre letras, dentro de lo que la fuente
-    // permite sin un control real de tracking en Slides). Con más espacio
-    // entre renglones respira mejor.
+    estiloTexto.setFontFamily('Georgia').setItalic(true).setFontSize(m.tamFontTexto).setForegroundColor('#2E2A26');
     cuadroTexto.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER).setLineSpacing(145);
 
-    const cuadroNombre = pagina.insertTextBox(nombre, celdaOriginal.x, inicioY + altoTexto + espacio, celdaOriginal.w, altoNombre);
+    const yNombre = Math.min(inicioY + altoTexto + m.espacio, finY - m.altoNombre);
+    const cuadroNombre = pagina.insertTextBox(nombre, celdaOriginal.x, yNombre, celdaOriginal.w, m.altoNombre);
     const estiloNombre = cuadroNombre.getText().getTextStyle();
-    estiloNombre.setFontFamily('Georgia').setFontSize(tamFontNombre).setForegroundColor('#6B5D50');
+    estiloNombre.setFontFamily('Georgia').setFontSize(m.tamFontNombre).setForegroundColor('#6B5D50');
     cuadroNombre.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
   } catch (err) {
     registrarIncidencia_('No se pudo dibujar la dedicatoria debajo de una foto (no crítico)', err);
